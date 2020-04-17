@@ -2,22 +2,26 @@ FROM ubuntu:18.04
 
 USER root
 
+### CREATE JOYVAN ###
+
+RUN groupadd -g 1000 joyvan && useradd -m -u 1000 -g joyvan joyvan
+
 ### BASICS ###
 # Technical Environment Variables
 ENV \
     SHELL="/bin/bash" \
-    HOME="/root"  \
+    HOME="/home/joyvan"  \
     # Nobteook server user: https://github.com/jupyter/docker-stacks/blob/master/base-notebook/Dockerfile#L33
-    NB_USER="root" \
-    USER_GID=0 \
-    XDG_CACHE_HOME="/root/.cache/" \
+    NB_USER="joyvan" \
+    USER_GID=1000 \
+    XDG_CACHE_HOME="/home/joyvan/.cache/" \
     XDG_RUNTIME_DIR="/tmp" \
     DISPLAY=":1" \
     TERM="xterm" \
     DEBIAN_FRONTEND="noninteractive" \
-    RESOURCES_PATH="/resources" \
-    SSL_RESOURCES_PATH="/resources/ssl" \
-    WORKSPACE_HOME="/workspace"
+    RESOURCES_PATH="/home/joyvan/resources" \
+    SSL_RESOURCES_PATH="/home/joyvan/resources/ssl" \
+    WORKSPACE_HOME="/home/joyvan/workspace"
 
 WORKDIR $HOME
 
@@ -1087,6 +1091,8 @@ LABEL \
 # So that they do not lose their data if they delete the container.
 # TODO: VOLUME [ "/workspace" ]
 # TODO: WORKDIR /workspace?
+
+USER joyvan
 
 # use global option with tini to kill full process groups: https://github.com/krallin/tini#process-group-killing
 ENTRYPOINT ["/tini", "-g", "--"]
