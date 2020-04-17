@@ -2,30 +2,42 @@ FROM ubuntu:18.04
 
 USER root
 
+### CREATE JOYVAN, GRANT SUDO (TEMPORARY) ###
+
+RUN \
+    apt-get update --fix-missing && \
+    apt-get install -y sudo dialog apt-utils && \
+    groupadd -g 1000 joyvan && useradd -m -u 1000 -g joyvan joyvan && \
+    echo "joyvan ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/joyvan
+
+### SWITCH TO joyvan ###
+
+USER joyvan 
+
 ### BASICS ###
 # Technical Environment Variables
 ENV \
     SHELL="/bin/bash" \
-    HOME="/root"  \
+    HOME="/home/joyvan"  \
     # Nobteook server user: https://github.com/jupyter/docker-stacks/blob/master/base-notebook/Dockerfile#L33
-    NB_USER="root" \
-    USER_GID=0 \
-    XDG_CACHE_HOME="/root/.cache/" \
+    NB_USER="joyvan" \
+    USER_GID=1000 \
+    XDG_CACHE_HOME="/home/joyvan/.cache/" \
     XDG_RUNTIME_DIR="/tmp" \
     DISPLAY=":1" \
     TERM="xterm" \
     DEBIAN_FRONTEND="noninteractive" \
-    RESOURCES_PATH="/resources" \
-    SSL_RESOURCES_PATH="/resources/ssl" \
-    WORKSPACE_HOME="/workspace"
+    RESOURCES_PATH="/home/joyvan/resources" \
+    SSL_RESOURCES_PATH="/home/joyvan/resources/ssl" \
+    WORKSPACE_HOME="/home/joyvan/workspace"
 
 WORKDIR $HOME
 
 # Make folders
 RUN \
-    mkdir $RESOURCES_PATH && chmod a+rwx $RESOURCES_PATH && \
-    mkdir $WORKSPACE_HOME && chmod a+rwx $WORKSPACE_HOME && \
-    mkdir $SSL_RESOURCES_PATH && chmod a+rwx $SSL_RESOURCES_PATH
+    mkdir $RESOURCES_PATH && sudo chmod a+rwx $RESOURCES_PATH && \
+    mkdir $WORKSPACE_HOME && sudo chmod a+rwx $WORKSPACE_HOME && \
+    mkdir $SSL_RESOURCES_PATH && sudo chmod a+rwx $SSL_RESOURCES_PATH
 
 # Layer cleanup script
 COPY resources/scripts/clean-layer.sh  /usr/bin/clean-layer.sh
@@ -33,21 +45,21 @@ COPY resources/scripts/fix-permissions.sh  /usr/bin/fix-permissions.sh
 
  # Make clean-layer and fix-permissions executable
  RUN \
-    chmod a+rwx /usr/bin/clean-layer.sh && \
-    chmod a+rwx /usr/bin/fix-permissions.sh
+    sudo chmod a+rwx /usr/bin/clean-layer.sh && \
+    sudo chmod a+rwx /usr/bin/fix-permissions.sh
 
 # Generate and Set locals
 # https://stackoverflow.com/questions/28405902/how-to-set-the-locale-inside-a-debian-ubuntu-docker-container#38553499
 RUN \
-    apt-get update && \
-    apt-get install -y locales && \
+    sudo apt-get update && \
+    sudo apt-get install -y locales && \
     # install locales-all?
-    sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
-    locale-gen && \
-    dpkg-reconfigure --frontend=noninteractive locales && \
-    update-locale LANG=en_US.UTF-8 && \
+    sudo sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    sudo locale-gen && \
+    sudo dpkg-reconfigure --frontend=noninteractive locales && \
+    sudo update-locale LANG=en_US.UTF-8 && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ENV LC_ALL="en_US.UTF-8" \
     LANG="en_US.UTF-8" \
@@ -56,14 +68,13 @@ ENV LC_ALL="en_US.UTF-8" \
 # Install basics
 RUN \
     # TODO add repos?
-    # add-apt-repository ppa:apt-fast/stable
-    # add-apt-repository 'deb http://security.ubuntu.com/ubuntu xenial-security main'
-    apt-get update --fix-missing && \
-    apt-get install -y sudo apt-utils && \
-    apt-get upgrade -y && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-        # This is necessary for apt to access HTTPS sources: 
+    # add-sudo apt-repository ppa:sudo apt-fast/stable
+    # add-sudo apt-repository 'deb http://security.ubuntu.com/ubuntu xenial-security main'
+    sudo apt-get upgrade -y && \
+    sudo apt-get update && \
+    sudo echo 'debconf debconf/frontend select Noninteractive' | sudo debconf-set-selections && \
+    sudo -E apt-get install -y --no-install-recommends \
+        # This is necessary for sudo apt to access HTTPS sources: 
         apt-transport-https \
         gnupg-agent \
         gpg-agent \
@@ -172,22 +183,22 @@ RUN \
         libbz2-dev \
         liblzma-dev \
         zlib1g-dev && \
-    chmod -R a+rwx /usr/local/bin/ && \
+    sudo chmod -R a+rwx /usr/local/bin/ && \
     # configure dynamic linker run-time bindings
-    ldconfig && \
+    sudo ldconfig && \
     # Fix permissions
-    fix-permissions.sh $HOME && \
+    sudo USER_GID=${USER_GID} fix-permissions.sh $HOME && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 # Add tini
-RUN wget --quiet https://github.com/krallin/tini/releases/download/v0.18.0/tini -O /tini && \
-    chmod +x /tini
+RUN sudo wget --quiet https://github.com/krallin/tini/releases/download/v0.18.0/tini -O /tini && \
+    sudo chmod +x /tini
 
 # prepare ssh for inter-container communication for remote python kernel
 RUN \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
+    sudo apt-get update && \
+    sudo apt-get install -y --no-install-recommends \
         openssh-client \
         openssh-server \
         # SSLH for SSH + HTTP(s) Multiplexing
@@ -195,45 +206,45 @@ RUN \
         # SSH Tooling
         autossh \
         mussh && \
-    chmod go-w $HOME && \
-    mkdir -p $HOME/.ssh/ && \
+    sudo chmod go-w $HOME && \
+    sudo -u joyvan mkdir -p $HOME/.ssh/ && \
     # create empty config file if not exists
-    touch $HOME/.ssh/config  && \
+    sudo touch $HOME/.ssh/config  && \
     sudo chown -R $NB_USER:users $HOME/.ssh && \
-    chmod 700 $HOME/.ssh && \
+    sudo chmod 700 $HOME/.ssh && \
     printenv >> $HOME/.ssh/environment && \
-    chmod -R a+rwx /usr/local/bin/ && \
+    sudo chmod -R a+rwx /usr/local/bin/ && \
     # Fix permissions
-    fix-permissions.sh $HOME && \
+    sudo USER_GID=${USER_GID} fix-permissions.sh $HOME && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 RUN \
     OPEN_RESTY_VERSION="1.15.8.2" && \
-    mkdir $RESOURCES_PATH"/openresty" && \
+    sudo -u joyvan mkdir $RESOURCES_PATH"/openresty" && \
     cd $RESOURCES_PATH"/openresty" && \
-    apt-get update && \
-    apt-get purge -y nginx nginx-common && \
+    sudo apt-get update && \
+    sudo apt-get purge -y nginx nginx-common && \
     # libpcre required, otherwise you get a 'the HTTP rewrite module requires the PCRE library' error
     # Install apache2-utils to generate user:password file for nginx.
-    apt-get install -y libssl-dev libpcre3 libpcre3-dev apache2-utils && \
-    wget --quiet https://openresty.org/download/openresty-$OPEN_RESTY_VERSION.tar.gz  -O ./openresty.tar.gz && \
-    tar xfz ./openresty.tar.gz && \
-    rm ./openresty.tar.gz && \
+    sudo apt-get install -y libssl-dev libpcre3 libpcre3-dev apache2-utils && \
+    sudo wget --quiet https://openresty.org/download/openresty-$OPEN_RESTY_VERSION.tar.gz  -O ./openresty.tar.gz && \
+    sudo tar xfz ./openresty.tar.gz && \
+    sudo rm ./openresty.tar.gz && \
     cd ./openresty-$OPEN_RESTY_VERSION/ && \
     # Surpress output - if there is a problem remove  > /dev/null
-    ./configure --with-http_stub_status_module --with-http_sub_module > /dev/null && \
-    make -j2 > /dev/null && \
-    make install > /dev/null && \
+    sudo ./configure --with-http_stub_status_module --with-http_sub_module > /dev/null && \
+    sudo make -j2 > /dev/null && \
+    sudo make install > /dev/null && \
     # create log dir and file - otherwise openresty will throw an error
-    mkdir -p /var/log/nginx/ && \
-    touch /var/log/nginx/upstream.log && \
+    sudo mkdir -p /var/log/nginx/ && \
+    sudo touch /var/log/nginx/upstream.log && \
     cd $RESOURCES_PATH && \
-    rm -r $RESOURCES_PATH"/openresty" && \
+    sudo rm -r $RESOURCES_PATH"/openresty" && \
     # Fix permissions
-    chmod -R a+rwx $RESOURCES_PATH && \
+    sudo chmod -R a+rwx $RESOURCES_PATH && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ENV PATH=/usr/local/openresty/nginx/sbin:$PATH
 
@@ -249,8 +260,8 @@ ENV \
     CONDA_PYTHON_DIR=/opt/conda/lib/python3.7
 
 RUN CONDA_VERSION="4.7.12" && \
-    wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}-Linux-x86_64.sh -O ~/miniconda.sh && \
-    /bin/bash ~/miniconda.sh -b -p $CONDA_DIR && \
+    sudo wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}-Linux-x86_64.sh -O ~/miniconda.sh && \
+    sudo /bin/bash ~/miniconda.sh -b -p $CONDA_DIR && \
     export PATH=$CONDA_DIR/bin:$PATH && \
     rm ~/miniconda.sh && \
     # Update conda
@@ -268,7 +279,7 @@ RUN CONDA_VERSION="4.7.12" && \
     ln -s $CONDA_DIR/bin/conda /usr/bin/conda && \
     # Update pip
     $CONDA_DIR/bin/pip install --upgrade pip && \
-    chmod -R a+rwx /usr/local/bin/ && \
+    sudo chmod -R a+rwx /usr/local/bin/ && \
     # Cleanup - Remove all here since conda is not in path as of now
     # find /opt/conda/ -follow -type f -name '*.a' -delete && \
     # find /opt/conda/ -follow -type f -name '*.js.map' -delete && \
@@ -276,8 +287,8 @@ RUN CONDA_VERSION="4.7.12" && \
     $CONDA_DIR/bin/conda clean -y -a -f  && \
     $CONDA_DIR/bin/conda build purge-all && \
     # Fix permissions
-    fix-permissions.sh $CONDA_DIR && \
-    clean-layer.sh
+    sudo USER_GID=${USER_GID} fix-permissions.sh $CONDA_DIR && \
+    sudo clean-layer.sh
 
 ENV PATH=$CONDA_DIR/bin:$PATH
 
@@ -286,43 +297,43 @@ ENV LD_LIBRARY_PATH=$CONDA_DIR/lib
 
 # Install node.js
 RUN \
-    apt-get update && \
+    sudo apt-get update && \
     # https://nodejs.org/en/about/releases/ use even numbered releases
     curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash - && \
-    apt-get install -y nodejs && \
+    sudo apt-get install -y nodejs && \
     # As conda is first in path, the commands 'node' and 'npm' reference to the version of conda. 
     # Replace those versions with the newly installed versions of node
     rm -f /opt/conda/bin/node && ln -s /usr/bin/node /opt/conda/bin/node && \
     rm -f /opt/conda/bin/npm && ln -s /usr/bin/npm /opt/conda/bin/npm && \
     # Fix permissions
-    chmod a+rwx /usr/bin/node && \
-    chmod a+rwx /usr/bin/npm && \
+    sudo chmod a+rwx /usr/bin/node && \
+    sudo chmod a+rwx /usr/bin/npm && \
     # Fix node versions - put into own dir and before conda:
-    mkdir -p /opt/node/bin && \
+    sudo -u joyvan mkdir -p /opt/node/bin && \
     ln -s /usr/bin/node /opt/node/bin/node && \
     ln -s /usr/bin/npm /opt/node/bin/npm && \
     # Install YARN
     curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add - && \
-    echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends yarn && \
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/sudo apt/sources.list.d/yarn.list && \
+    sudo apt-get update && \
+    sudo apt-get install -y --no-install-recommends yarn && \
     # Install typescript 
     /usr/bin/npm install -g typescript && \
     # Install webpack - 32 MB
     /usr/bin/npm install -g webpack && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ENV PATH=/opt/node/bin:$PATH
 
 # Install Java Runtime
 RUN \
-    apt-get update && \
+    sudo apt-get update && \
     # libgl1-mesa-dri > 150 MB -> Install jdk-headless version (without gui support)?
     # java runtime is extenable via the java-utils.sh tool intstaller script
-    apt-get install -y --no-install-recommends openjdk-11-jdk maven scala && \
+    sudo apt-get install -y --no-install-recommends openjdk-11-jdk maven scala && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ENV JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64" 
 # TODO add MAVEN_HOME?
@@ -333,61 +344,61 @@ ENV JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64"
 
 ### Install xfce UI
 RUN \
-    apt-get update && \
+    sudo apt-get update && \
     # Install custom font
-    apt-get install -y xfce4 xfce4-terminal xterm && \
-    apt-get purge -y pm-utils xscreensaver* && \
+    sudo apt-get install -y xfce4 xfce4-terminal xterm && \
+    sudo apt-get purge -y pm-utils xscreensaver* && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 # Install rdp support via xrdp
 RUN \
-    apt-get update && \
-    apt-get install -y --no-install-recommends xrdp && \
+    sudo apt-get update && \
+    sudo apt-get install -y --no-install-recommends xrdp && \
     # use xfce
     sudo sed -i.bak '/fi/a #xrdp multiple users configuration \n xfce-session \n' /etc/xrdp/startwm.sh && \
     # generate /etc/xrdp/rsakeys.ini
     cd /etc/xrdp/ && xrdp-keygen xrdp && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 # Install supervisor for process supervision
 RUN \
-    apt-get update && \
+    sudo apt-get update && \
     # Create sshd run directory - required for starting process via supervisor
-    mkdir -p /var/run/sshd && chmod 400 /var/run/sshd && \
+    sudo -u joyvan mkdir -p /var/run/sshd && sudo chmod 400 /var/run/sshd && \
     # Install rsyslog for syslog logging
-    apt-get install -y --no-install-recommends rsyslog && \
+    sudo apt-get install -y --no-install-recommends rsyslog && \
     pip install --no-cache-dir --upgrade supervisor supervisor-stdout && \
     # supervisor needs this logging path
-    mkdir -p /var/log/supervisor/ && \
+    sudo -u joyvan mkdir -p /var/log/supervisor/ && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ### END PROCESS TOOLS ###
 
 ### GUI TOOLS ###
 # Install VNC
 RUN \
-    apt-get update  && \
+    sudo apt-get update  && \
     # required for websockify
-    # apt-get install -y python-numpy  && \
+    # sudo apt-get install -y python-numpy  && \
     cd ${RESOURCES_PATH} && \
     # Tiger VNC
     wget -qO- https://dl.bintray.com/tigervnc/stable/tigervnc-1.10.1.x86_64.tar.gz | tar xz --strip 1 -C / && \
     # Install websockify
-    mkdir -p ./novnc/utils/websockify && \
+    sudo -u joyvan mkdir -p ./novnc/utils/websockify && \
     # Before updating the noVNC version, we need to make sure that our monkey patching scripts still work!!
     wget -qO- https://github.com/novnc/noVNC/archive/v1.1.0.tar.gz | tar xz --strip 1 -C ./novnc && \
     # use older version of websockify to prevent hanging connections on offline containers?, see https://github.com/ConSol/docker-headless-vnc-container/issues/50
     wget -qO- https://github.com/novnc/websockify/archive/v0.9.0.tar.gz | tar xz --strip 1 -C ./novnc/utils/websockify && \
-    chmod +x -v ./novnc/utils/*.sh && \
+    sudo chmod +x -v ./novnc/utils/*.sh && \
     # create user vnc directory
-    mkdir -p $HOME/.vnc && \
+    sudo -u joyvan mkdir -p $HOME/.vnc && \
     # Fix permissions
-    fix-permissions.sh ${RESOURCES_PATH} && \
+    sudo USER_GID=${USER_GID} fix-permissions.sh ${RESOURCES_PATH} && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 # Install Terminal / GDebi (Package Manager) / Glogg (Stream file viewer) & archive tools
 # Discover Tools:
@@ -396,52 +407,52 @@ RUN \
 # https://goodies.xfce.org/start
 # https://linux.die.net/man/1/
 RUN \
-    apt-get update && \
+    sudo apt-get update && \
     # Configuration database - required by git kraken / atom and other tools (1MB)
-    apt-get install -y --no-install-recommends gconf2 && \
-    apt-get install -y --no-install-recommends xfce4-terminal && \
-    apt-get install -y --no-install-recommends --allow-unauthenticated xfce4-taskmanager  && \
+    sudo apt-get install -y --no-install-recommends gconf2 && \
+    sudo apt-get install -y --no-install-recommends xfce4-terminal && \
+    sudo apt-get install -y --no-install-recommends --allow-unauthenticated xfce4-taskmanager  && \
     # Install gdebi deb installer
-    apt-get install -y --no-install-recommends gdebi && \
+    sudo apt-get install -y --no-install-recommends gdebi && \
     # Search for files
-    apt-get install -y --no-install-recommends catfish && \
-    # TODO: Unable to locate package:  apt-get install -y --no-install-recommends gnome-search-tool && 
-    apt-get install -y --no-install-recommends font-manager && \
+    sudo apt-get install -y --no-install-recommends catfish && \
+    # TODO: Unable to locate package:  sudo apt-get install -y --no-install-recommends gnome-search-tool && 
+    sudo apt-get install -y --no-install-recommends font-manager && \
     # vs support for thunar
-    apt-get install -y thunar-vcs-plugin && \
+    sudo apt-get install -y thunar-vcs-plugin && \
     # Streaming text editor for large files
-    apt-get install -y --no-install-recommends glogg  && \
-    apt-get install -y --no-install-recommends baobab && \
+    sudo apt-get install -y --no-install-recommends glogg  && \
+    sudo apt-get install -y --no-install-recommends baobab && \
     # Lightweight text editor
-    apt-get install -y mousepad && \
-    apt-get install -y --no-install-recommends vim && \
+    sudo apt-get install -y mousepad && \
+    sudo apt-get install -y --no-install-recommends vim && \
     # Install bat - colored cat: https://github.com/sharkdp/bat
     wget -q https://github.com/sharkdp/bat/releases/download/v0.12.1/bat_0.12.1_amd64.deb -O $RESOURCES_PATH/bat.deb && \
-    dpkg -i $RESOURCES_PATH/bat.deb && \
+    sudo dpkg -i $RESOURCES_PATH/bat.deb && \
     rm $RESOURCES_PATH/bat.deb && \
     # Process monitoring
-    apt-get install -y htop && \
+    sudo apt-get install -y htop && \
     # Install Archive/Compression Tools: https://wiki.ubuntuusers.de/Archivmanager/
-    apt-get install -y p7zip p7zip-rar && \
-    apt-get install -y --no-install-recommends thunar-archive-plugin && \
-    apt-get install -y xarchiver && \
+    sudo apt-get install -y p7zip p7zip-rar && \
+    sudo apt-get install -y --no-install-recommends thunar-archive-plugin && \
+    sudo apt-get install -y xarchiver && \
     # DB Utils
-    apt-get install -y --no-install-recommends sqlitebrowser && \
+    sudo apt-get install -y --no-install-recommends sqlitebrowser && \
     # Install nautilus and support for sftp mounting
-    apt-get install -y --no-install-recommends nautilus gvfs-backends && \
+    sudo apt-get install -y --no-install-recommends nautilus gvfs-backends && \
     # Install gigolo - Access remote systems
-    apt-get install -y --no-install-recommends gigolo gvfs-bin && \
+    sudo apt-get install -y --no-install-recommends gigolo gvfs-bin && \
     # xfce systemload panel plugin - needs to be activated
-    apt-get install -y --no-install-recommends xfce4-systemload-plugin && \
+    sudo apt-get install -y --no-install-recommends xfce4-systemload-plugin && \
     # Leightweight ftp client that supports sftp, http, ...
-    apt-get install -y --no-install-recommends gftp && \
+    sudo apt-get install -y --no-install-recommends gftp && \
     # Install chrome
-    apt-get install -y chromium-browser chromium-browser-l10n chromium-codecs-ffmpeg && \
+    sudo apt-get install -y chromium-browser chromium-browser-l10n chromium-codecs-ffmpeg && \
     ln -s /usr/bin/chromium-browser /usr/bin/google-chrome && \
     # Cleanup
     # Large package: gnome-user-guide 50MB app-install-data 50MB
-    apt-get remove -y app-install-data gnome-user-guide && \ 
-    clean-layer.sh
+    sudo apt-get remove -y app-install-data gnome-user-guide && \ 
+    sudo clean-layer.sh
 
 # Add the defaults from /lib/x86_64-linux-gnu, otherwise lots of no version errors
 # cannot be added above otherwise there are errors in the installation of the gui tools
@@ -455,21 +466,21 @@ COPY resources/tools/vs-code-server.sh $RESOURCES_PATH/tools/vs-code-server.sh
 RUN \
     /bin/bash $RESOURCES_PATH/tools/vs-code-server.sh --install && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ## ungit
 COPY resources/tools/ungit.sh $RESOURCES_PATH/tools/ungit.sh
 RUN \
     /bin/bash $RESOURCES_PATH/tools/ungit.sh --install && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ## netdata
 COPY resources/tools/netdata.sh $RESOURCES_PATH/tools/netdata.sh
 RUN \
     /bin/bash $RESOURCES_PATH/tools/netdata.sh --install && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ## Glances webtool is installed in python section below
 
@@ -478,7 +489,7 @@ COPY resources/tools/filebrowser.sh $RESOURCES_PATH/tools/filebrowser.sh
 RUN \
     /bin/bash $RESOURCES_PATH/tools/filebrowser.sh --install && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ARG ARG_WORKSPACE_FLAVOR="full"
 ENV WORKSPACE_FLAVOR=$ARG_WORKSPACE_FLAVOR
@@ -492,7 +503,7 @@ RUN \
     fi && \
     /bin/bash $RESOURCES_PATH/tools/vs-code-desktop.sh --install && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 # Install Firefox
 
@@ -505,7 +516,7 @@ RUN \
     fi && \
     /bin/bash $RESOURCES_PATH/tools/firefox.sh --install && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ### END GUI TOOLS ###
 
@@ -520,11 +531,11 @@ RUN \
     # Link Conda - All python are linke to the conda instances 
     # Linking python 3 crashes conda -> cannot install anyting - remove instead
     #ln -s -f $CONDA_DIR/bin/python /usr/bin/python3 && \
-    # if removed -> cannot use add-apt-repository
+    # if removed -> cannot use add-sudo apt-repository
     # rm /usr/bin/python3 && \
     # rm /usr/bin/python3.5
     ln -s -f $CONDA_DIR/bin/python /usr/bin/python && \
-    apt-get update && \
+    sudo apt-get update && \
     # upgrade pip
     pip install --upgrade pip && \
     # If minimal flavor - install 
@@ -581,13 +592,13 @@ RUN \
         # Remove pandoc - package for markdown conversion - not needed
         conda remove -y --force pandoc && \
         # Fix permissions
-        fix-permissions.sh $CONDA_DIR && \
+        sudo USER_GID=${USER_GID} fix-permissions.sh $CONDA_DIR && \
         # Cleanup
-        clean-layer.sh && \
+        sudo clean-layer.sh && \
         exit 0 ; \
     fi && \
     # OpenMPI support
-    apt-get install -y --no-install-recommends libopenmpi-dev openmpi-bin && \
+    sudo apt-get install -y --no-install-recommends libopenmpi-dev openmpi-bin && \
     # Install mkl, mkl-include & mkldnn
     conda install -y mkl-include && \
     # TODO - Install was not working conda install -y -c mingfeima mkldnn && \
@@ -602,18 +613,18 @@ RUN \
     # If light light flavor - exit here
     if [ "$WORKSPACE_FLAVOR" = "light" ]; then \
         # Fix permissions
-        fix-permissions.sh $CONDA_DIR && \
+        sudo USER_GID=${USER_GID} fix-permissions.sh $CONDA_DIR && \
         # Cleanup
-        clean-layer.sh && \
+        sudo clean-layer.sh && \
         exit 0 ; \
     fi && \
     # libartals == 40MB liblapack-dev == 20 MB
-    apt-get install -y --no-install-recommends liblapack-dev libatlas-base-dev libeigen3-dev libblas-dev && \
+    sudo apt-get install -y --no-install-recommends liblapack-dev libatlas-base-dev libeigen3-dev libblas-dev && \
     # pandoc -> installs libluajit -> problem for openresty
     # HDF5 (19MB)
-    apt-get install -y libhdf5-dev && \
+    sudo apt-get install -y libhdf5-dev && \
     # required for tesseract: 11MB - tesseract-ocr-dev?
-    apt-get install -y libtesseract-dev && \
+    sudo apt-get install -y libtesseract-dev && \
     # Install libjpeg turbo for speedup in image processing
     conda install -y libjpeg-turbo && \
     # Faiss - A library for efficient similarity search and clustering of dense vectors. 
@@ -624,9 +635,9 @@ RUN \
     # Spacy - download and large language removal
     python -m spacy download en && \
     # Fix permissions
-    fix-permissions.sh $CONDA_DIR && \
+    sudo USER_GID=${USER_GID} fix-permissions.sh $CONDA_DIR && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 # Fix conda version
 RUN \
@@ -659,7 +670,7 @@ RUN \
     # If minimal flavor - exit here
     if [ "$WORKSPACE_FLAVOR" = "minimal" ]; then \
         # Cleanup
-        clean-layer.sh && \
+        sudo clean-layer.sh && \
         exit 0 ; \
     fi && \
     # Configure nbdime
@@ -682,7 +693,7 @@ RUN \
     # If light flavor - exit here
     if [ "$WORKSPACE_FLAVOR" = "light" ]; then \
         # Cleanup
-        clean-layer.sh && \
+        sudo clean-layer.sh && \
         exit 0 ; \
     fi && \
     # Activate qgrid
@@ -693,9 +704,9 @@ RUN \
     # currently not working jupyter serverextension enable voila --sys-prefix && \
     # Enable ipclusters
     ipcluster nbextension enable && \
-    # Fix permissions? fix-permissions.sh $CONDA_DIR && \
+    # Fix permissions? sudo USER_GID=${USER_GID} fix-permissions.sh $CONDA_DIR && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 # install jupyterlab
 RUN \
@@ -709,7 +720,7 @@ RUN \
         jupyter lab clean && \
         jlpm cache clean && \
         rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
-        clean-layer.sh && \
+        sudo clean-layer.sh && \
         exit 0 ; \
     fi && \
     jupyter labextension install @jupyterlab/toc && \
@@ -726,7 +737,7 @@ RUN \
         jupyter lab clean && \
         jlpm cache clean && \
         rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
-        clean-layer.sh && \
+        sudo clean-layer.sh && \
         exit 0 ; \
     fi && \
     # Install jupyterlab language server support
@@ -750,7 +761,7 @@ RUN \
     jlpm cache clean && \
     # Remove build folder -> should be remove by lab clean as well?
     rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
-    clean-layer.sh
+    sudo clean-layer.sh
 
 # Install Jupyter Tooling Extension
 COPY resources/jupyter/extensions $RESOURCES_PATH/jupyter-extensions
@@ -758,7 +769,7 @@ COPY resources/jupyter/extensions $RESOURCES_PATH/jupyter-extensions
 RUN \
     pip install --no-cache-dir $RESOURCES_PATH/jupyter-extensions/tooling-extension/ && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 # Install and activate ZSH
 COPY resources/tools/oh-my-zsh.sh $RESOURCES_PATH/tools/oh-my-zsh.sh
@@ -775,7 +786,7 @@ RUN \
     # Install sdkman - needs to be executed after zsh
     curl -s https://get.sdkman.io | bash && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ### VSCODE ###
 
@@ -788,7 +799,7 @@ RUN \
         exit 0 ; \
     fi && \
     cd $RESOURCES_PATH && \
-    mkdir -p $HOME/.vscode/extensions/ && \
+    sudo -u joyvan mkdir -p $HOME/.vscode/extensions/ && \
     # Install python extension - (newer versions are 30MB bigger)
     VS_PYTHON_VERSION="2020.1.58038" && \
     wget --quiet --no-check-certificate https://github.com/microsoft/vscode-python/releases/download/$VS_PYTHON_VERSION/ms-python-release.vsix && \
@@ -832,28 +843,28 @@ RUN \
     rm davidanson.vscode-markdownlint.vsix && \
     mv extension $HOME/.vscode/extensions/davidanson.vscode-markdownlint-$VS_MARKDOWN_LINT_VERSION.vsix && \
     # Fix permissions
-    fix-permissions.sh $HOME/.vscode/extensions/ && \
+    sudo USER_GID=${USER_GID} fix-permissions.sh $HOME/.vscode/extensions/ && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ### END VSCODE ###
 
 ### INCUBATION ZONE ### 
 
 RUN \
-    apt-get update && \
+    sudo apt-get update && \
     # Newer jedi makes trouble with jupyterlab-lsp
     pip install --no-cache-dir jedi==0.15.2 && \
     # required by rodeo ide (8MB)
-    # apt-get install -y libgconf2-4 && \
+    # sudo apt-get install -y libgconf2-4 && \
     # required for pvporcupine (800kb)
-    # apt-get install -y portaudio19-dev && \
+    # sudo apt-get install -y portaudio19-dev && \
     # Audio drivers for magenta? (3MB)
-    # apt-get install -y libasound2-dev libjack-dev && \
+    # sudo apt-get install -y libasound2-dev libjack-dev && \
     # libproj-dev required for cartopy (15MB)
-    # apt-get install -y libproj-dev && \
+    # sudo apt-get install -y libproj-dev && \
     # mysql server: 150MB 
-    # apt-get install -y mysql-server && \
+    # sudo apt-get install -y mysql-server && \
    # If minimal or light flavor -> exit here
     if [ "$WORKSPACE_FLAVOR" = "minimal" ] || [ "$WORKSPACE_FLAVOR" = "light" ]; then \
         exit 0 ; \
@@ -863,7 +874,7 @@ RUN \
                 # pyaudio \
                 lazycluster && \
     # Cleanup
-    clean-layer.sh
+    sudo clean-layer.sh
 
 ### END INCUBATION ZONE ###
 
@@ -894,8 +905,8 @@ COPY resources/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
 # Copy all supervisor program definitions into workspace
 COPY resources/supervisor/programs/ /etc/supervisor/conf.d/
 
-# Assume yes to all apt commands, to avoid user confusion around stdin.
-COPY resources/config/90assumeyes /etc/apt/apt.conf.d/
+# Assume yes to all sudo apt commands, to avoid user confusion around stdin.
+COPY resources/config/90assumeyes /etc/sudo apt/sudo apt.conf.d/
 
 # Monkey Patching novnc: Styling and added clipboard support. All changed sections are marked with CUSTOM CODE
 COPY resources/novnc/ $RESOURCES_PATH/novnc/
@@ -929,7 +940,7 @@ RUN \
     cp -f $RESOURCES_PATH/branding/favicon.ico $CONDA_PYTHON_DIR"/site-packages/notebook/static/base/images/favicon.ico" && \
     cp -f $RESOURCES_PATH/branding/favicon.ico $CONDA_PYTHON_DIR"/site-packages/notebook/static/favicon.ico" && \
     # Fielbrowser Branding
-    mkdir -p $RESOURCES_PATH"/filebrowser/img/icons/" && \
+    sudo -u joyvan mkdir -p $RESOURCES_PATH"/filebrowser/img/icons/" && \
     cp -f $RESOURCES_PATH/branding/favicon.ico $RESOURCES_PATH"/filebrowser/img/icons/favicon.ico" && \
     # Todo - use actual png
     cp -f $RESOURCES_PATH/branding/favicon.ico $RESOURCES_PATH"/filebrowser/img/icons/favicon-32x32.png" && \
@@ -959,13 +970,13 @@ COPY resources/icons $RESOURCES_PATH/icons
 RUN \
     # ungit:
     echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Ungit\nComment=Git Client\nCategories=Development;\nIcon=/resources/icons/ungit-icon.png\nURL=http://localhost:8092/tools/ungit" > /usr/share/applications/ungit.desktop && \
-    chmod +x /usr/share/applications/ungit.desktop && \
+    sudo chmod +x /usr/share/applications/ungit.desktop && \
     # netdata:
     echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Netdata\nComment=Hardware Monitoring\nCategories=System;Utility;Development;\nIcon=/resources/icons/netdata-icon.png\nURL=http://localhost:8092/tools/netdata" > /usr/share/applications/netdata.desktop && \
-    chmod +x /usr/share/applications/netdata.desktop && \
+    sudo chmod +x /usr/share/applications/netdata.desktop && \
     # glances:
     echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Glances\nComment=Hardware Monitoring\nCategories=System;Utility;\nIcon=/resources/icons/glances-icon.png\nURL=http://localhost:8092/tools/glances" > /usr/share/applications/glances.desktop && \
-    chmod +x /usr/share/applications/glances.desktop && \
+    sudo chmod +x /usr/share/applications/glances.desktop && \
     # Remove mail and logout desktop icons
     rm /usr/share/applications/exo-mail-reader.desktop && \
     rm /usr/share/applications/xfce4-session-logout.desktop
@@ -979,19 +990,19 @@ COPY resources/reports $RESOURCES_PATH/reports
 
 # Various configurations
 RUN \
-    touch $HOME/.ssh/config && \
+    sudo touch $HOME/.ssh/config && \
     # clear chome init file - not needed since we load settings manually
-    chmod -R a+rwx $WORKSPACE_HOME && \
-    chmod -R a+rwx $RESOURCES_PATH && \
+    sudo chmod -R a+rwx $WORKSPACE_HOME && \
+    sudo chmod -R a+rwx $RESOURCES_PATH && \
     # make all desktop launchers executable
-    chmod -R a+rwx /usr/share/applications/ && \
+    sudo chmod -R a+rwx /usr/share/applications/ && \
     ln -s $RESOURCES_PATH/tools/ $HOME/Desktop/Tools && \
     ln -s $WORKSPACE_HOME $HOME/Desktop/workspace && \
-    chmod a+rwx /usr/local/bin/start-notebook.sh && \
-    chmod a+rwx /usr/local/bin/start.sh && \
-    chmod a+rwx /usr/local/bin/start-singleuser.sh && \
+    sudo chmod a+rwx /usr/local/bin/start-notebook.sh && \
+    sudo chmod a+rwx /usr/local/bin/start.sh && \
+    sudo chmod a+rwx /usr/local/bin/start-singleuser.sh && \
     chown root:root /tmp && \
-    chmod a+rwx /tmp && \
+    sudo chmod a+rwx /tmp && \
     # Set /workspace as default directory to navigate to as root user
     echo  'cd '$WORKSPACE_HOME >> $HOME/.bashrc
 
@@ -1087,6 +1098,12 @@ LABEL \
 # So that they do not lose their data if they delete the container.
 # TODO: VOLUME [ "/workspace" ]
 # TODO: WORKDIR /workspace?
+
+### REMOVE JOYVAN SUDO ###
+
+RUN sudo rm /etc/sudoers.d/joyvan
+
+# TODO: Replace with limited permissions to run tool scripts.
 
 # use global option with tini to kill full process groups: https://github.com/krallin/tini#process-group-killing
 ENTRYPOINT ["/tini", "-g", "--"]
