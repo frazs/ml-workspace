@@ -3,15 +3,6 @@
 # Stops script execution if a command has an error
 set -e
 
-INSTALL_ONLY=0
-# Loop through arguments and process them: https://pretzelhands.com/posts/command-line-flags
-for arg in "$@"; do
-    case $arg in
-        -i|--install) INSTALL_ONLY=1 ; shift ;;
-        *) break ;;
-    esac
-done
-
 if ! hash fasttext 2>/dev/null; then
     echo "Installing Fasttext. Please wait..."
     mkdir $RESOURCES_PATH"/fasttext"
@@ -30,12 +21,5 @@ if ! hash fasttext 2>/dev/null; then
     # pip install moved to requirements file
 else
     echo "Fasttext is already installed"
-fi
-
-# Run
-if [ $INSTALL_ONLY = 0 ] ; then
-    echo "Use Fasttext via command line:"
-    fasttext --help
-    sleep 20
 fi
 

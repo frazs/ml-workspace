@@ -3,15 +3,6 @@
 # Stops script execution if a command has an error
 set -e
 
-INSTALL_ONLY=0
-# Loop through arguments and process them: https://pretzelhands.com/posts/command-line-flags
-for arg in "$@"; do
-    case $arg in
-        -i|--install) INSTALL_ONLY=1 ; shift ;;
-        *) break ;;
-    esac
-done
-
 if [ ! -d "$CONDA_DIR/envs/python2" ]; then
     echo "Installing Python 2.7 Interpreter and Kernel. Please wait..."
     conda create --yes -p $CONDA_DIR/envs/python2 python=2.7
@@ -35,11 +26,3 @@ if [ ! -d "$CONDA_DIR/envs/python2" ]; then
 else
     echo "Python 2.7 Interpreter is already installed"
 fi
-
-# Run
-if [ $INSTALL_ONLY = 0 ] ; then
-    echo "Use python 2.7 via command-line."
-    python2.7 --version
-    sleep 15
-fi
-

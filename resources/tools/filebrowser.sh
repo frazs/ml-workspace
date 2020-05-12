@@ -28,16 +28,3 @@ if [ ! -f "/usr/local/bin/filebrowser"  ]; then
 else
     echo "Filebrowser is already installed"
 fi
-
-# Run
-if [ $INSTALL_ONLY = 0 ] ; then
-    if [ -z "$PORT" ]; then
-        read -p "Please provide a port for starting Filebrowser: " PORT
-    fi
-
-    echo "Starting Filebrowser on port "$PORT
-    # Create tool entry for tooling plugin
-    echo '{"id": "filebrowser-link", "name": "Filebrowser", "url_path": "/tools/'$PORT'/", "description": "Browse and manage workspace files"}' > $HOME/.workspace/tools/filebrowser.json
-    /usr/local/bin/filebrowser --port=$PORT
-    sleep 15
-fi

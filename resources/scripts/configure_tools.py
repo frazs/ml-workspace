@@ -36,19 +36,19 @@ elif ENV_AUTHENTICATE_VIA_JUPYTER and ENV_AUTHENTICATE_VIA_JUPYTER.lower() != "f
     token_parameter = "?token=" + ENV_AUTHENTICATE_VIA_JUPYTER
 
 # Create Jupyter Shortcut - at runtime since the jupyterhub token is needed
-url = 'http://localhost:8092' + token_parameter
-shortcut_metadata = '[Desktop Entry]\nVersion=1.0\nType=Link\nName=Jupyter Notebook\nComment=\nCategories=Development;\nIcon=' + ENV_RESOURCES_PATH + '/icons/jupyter-icon.png\nURL=' + url
-call('printf "' + shortcut_metadata + '" > ' + DESKTOP_PATH + '/jupyter.desktop', shell=True) # create a link on the Desktop to your Jupyter notebook server
-call('chmod +x ' + DESKTOP_PATH + '/jupyter.desktop', shell=True) # Make executable
-call('printf "' + shortcut_metadata + '" > /usr/share/applications/jupyter.desktop', shell=True) # create a link in categories menu to your Jupyter notebook server
-call('chmod +x /usr/share/applications/jupyter.desktop', shell=True) # Make executable
+# url = 'http://localhost:8092' + token_parameter
+# shortcut_metadata = '[Desktop Entry]\nVersion=1.0\nType=Link\nName=Jupyter Notebook\nComment=\nCategories=Development;\nIcon=' + ENV_RESOURCES_PATH + '/icons/jupyter-icon.png\nURL=' + url
+# call('printf "' + shortcut_metadata + '" > ' + DESKTOP_PATH + '/jupyter.desktop', shell=True) # create a link on the Desktop to your Jupyter notebook server
+# call('chmod +x ' + DESKTOP_PATH + '/jupyter.desktop', shell=True) # Make executable
+# call('printf "' + shortcut_metadata + '" > /usr/share/applications/jupyter.desktop', shell=True) # create a link in categories menu to your Jupyter notebook server
+# call('chmod +x /usr/share/applications/jupyter.desktop', shell=True) # Make executable
 
 # Create Jupyter Lab Shortcut
-url = 'http://localhost:8092' + "/lab" + token_parameter
-shortcut_metadata = '[Desktop Entry]\nVersion=1.0\nType=Link\nName=Jupyter Lab\nComment=\nCategories=Development;\nIcon=' + ENV_RESOURCES_PATH + '/icons/jupyterlab-icon.png\nURL=' + url
+# url = 'http://localhost:8092' + "/lab" + token_parameter
+# shortcut_metadata = '[Desktop Entry]\nVersion=1.0\nType=Link\nName=Jupyter Lab\nComment=\nCategories=Development;\nIcon=' + ENV_RESOURCES_PATH + '/icons/jupyterlab-icon.png\nURL=' + url
 
-call('printf "' + shortcut_metadata + '" > /usr/share/applications/jupyterlab.desktop', shell=True) # create a link in categories menu to your Jupyter Lab server
-call('chmod +x /usr/share/applications/jupyterlab.desktop', shell=True) # Make executable
+# call('printf "' + shortcut_metadata + '" > /usr/share/applications/jupyterlab.desktop', shell=True) # create a link in categories menu to your Jupyter Lab server
+# call('chmod +x /usr/share/applications/jupyterlab.desktop', shell=True) # Make executable
 
 # Configure filebrowser - only if database file does not exist yet (e.g. isn't restored)
 if not os.path.exists(HOME + '/filebrowser.db'):

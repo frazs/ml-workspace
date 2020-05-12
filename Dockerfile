@@ -2,26 +2,24 @@ FROM ubuntu:18.04
 
 USER root
 
-### CREATE JOYVAN ###
-
-RUN groupadd -g 1000 joyvan && useradd -m -u 1000 -g joyvan joyvan
-
 ### BASICS ###
 # Technical Environment Variables
 ENV \
     SHELL="/bin/bash" \
-    HOME="/home/joyvan"  \
+    HOME="/home/jovyan"  \
     # Nobteook server user: https://github.com/jupyter/docker-stacks/blob/master/base-notebook/Dockerfile#L33
-    NB_USER="joyvan" \
+    NB_USER="jovyan" \
     USER_GID=1000 \
-    XDG_CACHE_HOME="/home/joyvan/.cache/" \
+    XDG_CACHE_HOME="/home/jovyan/.cache/" \
     XDG_RUNTIME_DIR="/tmp" \
     DISPLAY=":1" \
     TERM="xterm" \
     DEBIAN_FRONTEND="noninteractive" \
-    RESOURCES_PATH="/home/joyvan/resources" \
-    SSL_RESOURCES_PATH="/home/joyvan/resources/ssl" \
-    WORKSPACE_HOME="/home/joyvan/workspace"
+    RESOURCES_PATH="/resources" \
+    SSL_RESOURCES_PATH="/resources/ssl" \
+    WORKSPACE_HOME="/workspace"
+
+RUN groupadd -g 1000 jovyan && useradd -m -u 1000 -g jovyan jovyan
 
 WORKDIR $HOME
 
@@ -29,7 +27,14 @@ WORKDIR $HOME
 RUN \
     mkdir $RESOURCES_PATH && chmod a+rwx $RESOURCES_PATH && \
     mkdir $WORKSPACE_HOME && chmod a+rwx $WORKSPACE_HOME && \
-    mkdir $SSL_RESOURCES_PATH && chmod a+rwx $SSL_RESOURCES_PATH
+    mkdir $SSL_RESOURCES_PATH && chmod a+rwx $SSL_RESOURCES_PATH && \
+    mkdir /var/run/supervisord && \
+    chown -R jovyan:jovyan /var/run/supervisord
+
+COPY resources/scripts/init.sh /
+COPY resources/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
+COPY resources/supervisor/programs /etc/supervisor/conf.d/
+# COPY resources/tools/ $RESOURCES_PATH/tools
 
 # Layer cleanup script
 COPY resources/scripts/clean-layer.sh  /usr/bin/clean-layer.sh
@@ -37,8 +42,8 @@ COPY resources/scripts/fix-permissions.sh  /usr/bin/fix-permissions.sh
 
  # Make clean-layer and fix-permissions executable
  RUN \
-    chmod a+rwx /usr/bin/clean-layer.sh && \
-    chmod a+rwx /usr/bin/fix-permissions.sh
+    chmod u+rwx /usr/bin/clean-layer.sh && \
+    chmod u+rwx /usr/bin/fix-permissions.sh
 
 # Generate and Set locals
 # https://stackoverflow.com/questions/28405902/how-to-set-the-locale-inside-a-debian-ubuntu-docker-container#38553499
@@ -105,7 +110,7 @@ RUN \
         # Find files
         locate \
         # Dev Tools
-        sqlite3 \
+        # sqlite3 \
         # XML Utils
         xmlstarlet \
         #  R*-tree implementation - Required for earthpy, geoviews (3MB)
@@ -115,9 +120,9 @@ RUN \
         # Minimalistic C client for Redis
         libhiredis-dev \
         # postgresql client
-        libpq-dev \
+        # libpq-dev \
         # mysql client (10MB)
-        libmysqlclient-dev \
+        # libmysqlclient-dev \
         # mariadb client (7MB)
         # libmariadbclient-dev \
         # image processing library (6MB), required for tesseract
@@ -235,7 +240,7 @@ RUN \
     cd $RESOURCES_PATH && \
     rm -r $RESOURCES_PATH"/openresty" && \
     # Fix permissions
-    chmod -R a+rwx $RESOURCES_PATH && \
+    chmod -R u+rwx $RESOURCES_PATH && \
     # Cleanup
     clean-layer.sh
 
@@ -320,15 +325,15 @@ RUN \
 ENV PATH=/opt/node/bin:$PATH
 
 # Install Java Runtime
-RUN \
-    apt-get update && \
-    # libgl1-mesa-dri > 150 MB -> Install jdk-headless version (without gui support)?
-    # java runtime is extenable via the java-utils.sh tool intstaller script
-    apt-get install -y --no-install-recommends openjdk-11-jdk maven scala && \
-    # Cleanup
-    clean-layer.sh
+# RUN \
+#     apt-get update && \
+#     # libgl1-mesa-dri > 150 MB -> Install jdk-headless version (without gui support)?
+#     # java runtime is extenable via the java-utils.sh tool intstaller script
+#     apt-get install -y --no-install-recommends openjdk-11-jdk maven scala && \
+#     # Cleanup
+#     clean-layer.sh
 
-ENV JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64" 
+# ENV JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64" 
 # TODO add MAVEN_HOME?
 
 ### END RUNTIMES ###
@@ -440,8 +445,8 @@ RUN \
     # Leightweight ftp client that supports sftp, http, ...
     apt-get install -y --no-install-recommends gftp && \
     # Install chrome
-    apt-get install -y chromium-browser chromium-browser-l10n chromium-codecs-ffmpeg && \
-    ln -s /usr/bin/chromium-browser /usr/bin/google-chrome && \
+    # apt-get install -y chromium-browser chromium-browser-l10n chromium-codecs-ffmpeg && \
+    # ln -s /usr/bin/chromium-browser /usr/bin/google-chrome && \
     # Cleanup
     # Large package: gnome-user-guide 50MB app-install-data 50MB
     apt-get remove -y app-install-data gnome-user-guide && \ 
@@ -461,7 +466,7 @@ RUN \
     # Cleanup
     clean-layer.sh
 
-## ungit
+# ungit
 COPY resources/tools/ungit.sh $RESOURCES_PATH/tools/ungit.sh
 RUN \
     /bin/bash $RESOURCES_PATH/tools/ungit.sh --install && \
@@ -532,14 +537,15 @@ RUN \
     # upgrade pip
     pip install --upgrade pip && \
     # If minimal flavor - install 
-    if [ "$WORKSPACE_FLAVOR" = "minimal" ]; then \
-        # Install nomkl - mkl needs lots of space
-        conda install -y --update-all nomkl ; \
-    else \
-        # Install mkl for faster computations
-        conda install -y --update-all mkl ; \
-    fi && \
+    # if [ "$WORKSPACE_FLAVOR" = "minimal" ]; then \
+    #     # Install nomkl - mkl needs lots of space
+    #     conda install -y --update-all nomkl ; \
+    # else \
+    #     # Install mkl for faster computations
+    #     conda install -y --update-all mkl ; \
+    # fi && \
     # Install some basics - required to run container
+    conda install -y --update-all nomkl && \
     conda install -y --update-all \
             'python='$PYTHON_VERSION \
             tqdm \
@@ -566,7 +572,6 @@ RUN \
             Pillow \
             'ipython=7.11.*' \
             'notebook=6.0.*' \
-            'jupyterlab=1.2.*' \
             # Selected by library evaluation
             networkx \
             click \
@@ -593,16 +598,16 @@ RUN \
     # OpenMPI support
     apt-get install -y --no-install-recommends libopenmpi-dev openmpi-bin && \
     # Install mkl, mkl-include & mkldnn
-    conda install -y mkl-include && \
+    # conda install -y mkl-include && \
     # TODO - Install was not working conda install -y -c mingfeima mkldnn && \
     # Install numba
     conda install -y numba && \
     # Install tensorflow - cpu only -  mkl support
-    conda install -y 'tensorflow=2.0.*' && \
+    # conda install -y 'tensorflow=2.0.*' && \
     # Install pytorch - cpu only
-    conda install -y -c pytorch "pytorch==1.4.*"  torchvision cpuonly && \
+    # conda install -y -c pytorch "pytorch==1.4.*"  torchvision cpuonly && \
     # Install light pip requirements
-    pip install --no-cache-dir --upgrade -r ${RESOURCES_PATH}/libraries/requirements-light.txt && \
+    #pip install --no-cache-dir --upgrade -r ${RESOURCES_PATH}/libraries/requirements-light.txt && \
     # If light light flavor - exit here
     if [ "$WORKSPACE_FLAVOR" = "light" ]; then \
         # Fix permissions
@@ -617,16 +622,16 @@ RUN \
     # HDF5 (19MB)
     apt-get install -y libhdf5-dev && \
     # required for tesseract: 11MB - tesseract-ocr-dev?
-    apt-get install -y libtesseract-dev && \
+    # NOTE doesn't work without mysql: apt-get install -y libtesseract-dev && \
     # Install libjpeg turbo for speedup in image processing
-    conda install -y libjpeg-turbo && \
+    # ERROR WHEN GETTING TORCH WITH PYTORCH DISABLED: conda install -y libjpeg-turbo && \
     # Faiss - A library for efficient similarity search and clustering of dense vectors. 
-    conda install -y -c pytorch faiss-cpu && \
+    # conda install -y -c pytorch faiss-cpu && \
     # Install full pip requirements
-    pip install --no-cache-dir --upgrade -r ${RESOURCES_PATH}/libraries/requirements-full.txt && \
+    #pip install --no-cache-dir --upgrade -r ${RESOURCES_PATH}/libraries/requirements-full.txt && \
     # Setup Spacy
     # Spacy - download and large language removal
-    python -m spacy download en && \
+    # python -m spacy download en && \
     # Fix permissions
     fix-permissions.sh $CONDA_DIR && \
     # Cleanup
@@ -661,100 +666,100 @@ RUN \
     # Disable Jupyter Server Proxy
     jupyter nbextension disable jupyter_server_proxy/tree && \
     # If minimal flavor - exit here
-    if [ "$WORKSPACE_FLAVOR" = "minimal" ]; then \
-        # Cleanup
-        clean-layer.sh && \
-        exit 0 ; \
-    fi && \
+    # if [ "$WORKSPACE_FLAVOR" = "minimal" ]; then \
+    #     # Cleanup
+    #     clean-layer.sh && \
+    #     exit 0 ; \
+    # fi && \
     # Configure nbdime
-    nbdime config-git --enable --global && \
+    # nbdime config-git --enable --global && \
     # Enable useful extensions
-    jupyter nbextension enable skip-traceback/main && \
+    # jupyter nbextension enable skip-traceback/main && \
     # jupyter nbextension enable comment-uncomment/main && \
     # Do not enable variable inspector: causes trouble: https://github.com/ml-tooling/ml-workspace/issues/10
     # jupyter nbextension enable varInspector/main && \
     #jupyter nbextension enable spellchecker/main && \
-    jupyter nbextension enable toc2/main && \
-    jupyter nbextension enable execute_time/ExecuteTime && \
-    jupyter nbextension enable collapsible_headings/main && \
-    jupyter nbextension enable codefolding/main && \
+    # jupyter nbextension enable toc2/main && \
+    # jupyter nbextension enable execute_time/ExecuteTime && \
+    # jupyter nbextension enable collapsible_headings/main && \
+    # jupyter nbextension enable codefolding/main && \
     # Activate Jupyter Tensorboard
-    jupyter tensorboard enable && \
+    # jupyter tensorboard enable && \
     # Edit notebook config
-    echo '{"nbext_hide_incompat": false}' > $HOME/.jupyter/nbconfig/common.json && \
-    cat $HOME/.jupyter/nbconfig/notebook.json | jq '.toc2={"moveMenuLeft": false,"widenNotebook": false,"skip_h1_title": false,"sideBar": true,"number_sections": false,"collapse_to_match_collapsible_headings": true}' > tmp.$$.json && mv tmp.$$.json $HOME/.jupyter/nbconfig/notebook.json && \
+    # echo '{"nbext_hide_incompat": false}' > $HOME/.jupyter/nbconfig/common.json && \
+    # cat $HOME/.jupyter/nbconfig/notebook.json | jq '.toc2={"moveMenuLeft": false,"widenNotebook": false,"skip_h1_title": false,"sideBar": true,"number_sections": false,"collapse_to_match_collapsible_headings": true}' > tmp.$$.json && mv tmp.$$.json $HOME/.jupyter/nbconfig/notebook.json && \
     # If light flavor - exit here
-    if [ "$WORKSPACE_FLAVOR" = "light" ]; then \
-        # Cleanup
-        clean-layer.sh && \
-        exit 0 ; \
-    fi && \
+    # if [ "$WORKSPACE_FLAVOR" = "light" ]; then \
+    #     # Cleanup
+    #     clean-layer.sh && \
+    #     exit 0 ; \
+    # fi && \
     # Activate qgrid
-    jupyter nbextension enable --py --sys-prefix qgrid && \
+    # jupyter nbextension enable --py --sys-prefix qgrid && \
     # Activate Colab support
-    jupyter serverextension enable --py jupyter_http_over_ws && \
+    # jupyter serverextension enable --py jupyter_http_over_ws && \
     # Activate Voila Rendering 
     # currently not working jupyter serverextension enable voila --sys-prefix && \
     # Enable ipclusters
-    ipcluster nbextension enable && \
+    # ipcluster nbextension enable && \
     # Fix permissions? fix-permissions.sh $CONDA_DIR && \
     # Cleanup
     clean-layer.sh
 
-# install jupyterlab
-RUN \
-    # Required for jupytext and matplotlib plugins
-    jupyter lab build && \
-    # jupyterlab installed in requirements section
-    jupyter labextension install @jupyter-widgets/jupyterlab-manager && \
-    # If minimal flavor - do not install jupyterlab extensions
-    if [ "$WORKSPACE_FLAVOR" = "minimal" ]; then \
-        # Cleanup
-        jupyter lab clean && \
-        jlpm cache clean && \
-        rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
-        clean-layer.sh && \
-        exit 0 ; \
-    fi && \
-    jupyter labextension install @jupyterlab/toc && \
-    jupyter labextension install jupyterlab_tensorboard && \
-    # install jupyterlab git
-    jupyter labextension install @jupyterlab/git && \
-    pip install jupyterlab-git && \ 
-    jupyter serverextension enable --py jupyterlab_git && \
-    # For Matplotlib: https://github.com/matplotlib/jupyter-matplotlib
-    jupyter labextension install jupyter-matplotlib && \
-    # Do not install any other jupyterlab extensions
-    if [ "$WORKSPACE_FLAVOR" = "light" ]; then \
-        # Cleanup
-        jupyter lab clean && \
-        jlpm cache clean && \
-        rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
-        clean-layer.sh && \
-        exit 0 ; \
-    fi && \
-    # Install jupyterlab language server support
-    pip install --pre jupyter-lsp && \
-    jupyter labextension install @krassowski/jupyterlab-lsp && \
-    # For Plotly
-    jupyter labextension install @jupyterlab/plotly-extension && \
-    jupyter labextension install jupyterlab-chart-editor && \
-    # For holoview
-    jupyter labextension install @pyviz/jupyterlab_pyviz && \
-    # Install jupyterlab variable inspector - https://github.com/lckr/jupyterlab-variableInspector
-    jupyter labextension install @lckr/jupyterlab_variableinspector && \
-    # Install jupyterlab code formattor - https://github.com/ryantam626/jupyterlab_code_formatter
-    jupyter labextension install @ryantam626/jupyterlab_code_formatter && \
-    pip install jupyterlab_code_formatter && \
-    jupyter serverextension enable --py jupyterlab_code_formatter && \
-    jupyter lab build && \
-    # Cleanup
-    # Clean jupyter lab cache: https://github.com/jupyterlab/jupyterlab/issues/4930
-    jupyter lab clean && \
-    jlpm cache clean && \
-    # Remove build folder -> should be remove by lab clean as well?
-    rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
-    clean-layer.sh
+# # install jupyterlab
+# RUN \
+#     # Required for jupytext and matplotlib plugins
+#     jupyter lab build && \
+#     # jupyterlab installed in requirements section
+#     jupyter labextension install @jupyter-widgets/jupyterlab-manager && \
+#     # If minimal flavor - do not install jupyterlab extensions
+#     if [ "$WORKSPACE_FLAVOR" = "minimal" ]; then \
+#         # Cleanup
+#         jupyter lab clean && \
+#         jlpm cache clean && \
+#         rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
+#         clean-layer.sh && \
+#         exit 0 ; \
+#     fi && \
+#     jupyter labextension install @jupyterlab/toc && \
+#     jupyter labextension install jupyterlab_tensorboard && \
+#     # install jupyterlab git
+#     jupyter labextension install @jupyterlab/git && \
+#     pip install jupyterlab-git==0.9.0 && \ 
+#     jupyter serverextension enable --py jupyterlab_git && \
+#     # For Matplotlib: https://github.com/matplotlib/jupyter-matplotlib
+#     jupyter labextension install jupyter-matplotlib && \
+#     # Do not install any other jupyterlab extensions
+#     if [ "$WORKSPACE_FLAVOR" = "light" ]; then \
+#         # Cleanup
+#         jupyter lab clean && \
+#         jlpm cache clean && \
+#         rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
+#         clean-layer.sh && \
+#         exit 0 ; \
+#     fi && \
+#     # Install jupyterlab language server support
+#     pip install --pre jupyter-lsp && \
+#     jupyter labextension install @krassowski/jupyterlab-lsp@0.8.0 && \
+#     # For Plotly
+#     jupyter labextension install @jupyterlab/plotly-extension && \
+#     jupyter labextension install jupyterlab-chart-editor && \
+#     # For holoview
+#     jupyter labextension install @pyviz/jupyterlab_pyviz && \
+#     # Install jupyterlab variable inspector - https://github.com/lckr/jupyterlab-variableInspector
+#     jupyter labextension install @lckr/jupyterlab_variableinspector && \
+#     # Install jupyterlab code formattor - https://github.com/ryantam626/jupyterlab_code_formatter
+#     jupyter labextension install @ryantam626/jupyterlab_code_formatter && \
+#     pip install jupyterlab_code_formatter && \
+#     jupyter serverextension enable --py jupyterlab_code_formatter && \
+#     jupyter lab build && \
+#     # Cleanup
+#     # Clean jupyter lab cache: https://github.com/jupyterlab/jupyterlab/issues/4930
+#     jupyter lab clean && \
+#     jlpm cache clean && \
+#     # Remove build folder -> should be remove by lab clean as well?
+#     rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
+#     clean-layer.sh
 
 # Install Jupyter Tooling Extension
 COPY resources/jupyter/extensions $RESOURCES_PATH/jupyter-extensions
@@ -859,13 +864,13 @@ RUN \
     # mysql server: 150MB 
     # apt-get install -y mysql-server && \
    # If minimal or light flavor -> exit here
-    if [ "$WORKSPACE_FLAVOR" = "minimal" ] || [ "$WORKSPACE_FLAVOR" = "light" ]; then \
-        exit 0 ; \
-    fi && \
+    # if [ "$WORKSPACE_FLAVOR" = "minimal" ] || [ "$WORKSPACE_FLAVOR" = "light" ]; then \
+    #     exit 0 ; \
+    # fi && \
     # New Python Libraries:
-    pip install --no-cache-dir \
+    # pip install --no-cache-dir \
                 # pyaudio \
-                lazycluster && \
+                # lazycluster && \
     # Cleanup
     clean-layer.sh
 
@@ -924,7 +929,7 @@ COPY resources/jupyter/plugin.jupyterlab-settings $HOME/.jupyter/lab/user-settin
 COPY resources/jupyter/ipython_config.py /etc/ipython/ipython_config.py
 
 # Add tensorboard patch - use tensorboard jupyter plugin instead of the actual tensorboard magic
-COPY resources/jupyter/tensorboard_notebook_patch.py $CONDA_PYTHON_DIR/site-packages/tensorboard/notebook.py
+# COPY resources/jupyter/tensorboard_notebook_patch.py $CONDA_PYTHON_DIR/site-packages/tensorboard/notebook.py
 
 # Branding of various components
 RUN \
@@ -965,14 +970,14 @@ RUN \
     echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Ungit\nComment=Git Client\nCategories=Development;\nIcon=/resources/icons/ungit-icon.png\nURL=http://localhost:8092/tools/ungit" > /usr/share/applications/ungit.desktop && \
     chmod +x /usr/share/applications/ungit.desktop && \
     # netdata:
-    echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Netdata\nComment=Hardware Monitoring\nCategories=System;Utility;Development;\nIcon=/resources/icons/netdata-icon.png\nURL=http://localhost:8092/tools/netdata" > /usr/share/applications/netdata.desktop && \
-    chmod +x /usr/share/applications/netdata.desktop && \
+    echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Netdata\nComment=Hardware Monitoring\nCategories=System;Utility;Development;\nIcon=/resources/icons/netdata-icon.png\nURL=http://localhost:8092/tools/netdata" > $HOME/Desktop/netdata.desktop && \
+    chmod +x $HOME/Desktop/netdata.desktop && \
     # glances:
-    echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Glances\nComment=Hardware Monitoring\nCategories=System;Utility;\nIcon=/resources/icons/glances-icon.png\nURL=http://localhost:8092/tools/glances" > /usr/share/applications/glances.desktop && \
-    chmod +x /usr/share/applications/glances.desktop && \
+    # echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Glances\nComment=Hardware Monitoring\nCategories=System;Utility;\nIcon=/resources/icons/glances-icon.png\nURL=http://localhost:8092/tools/glances" > /usr/share/applications/glances.desktop && \
+    # chmod +x /usr/share/applications/glances.desktop && \
     # Remove mail and logout desktop icons
-    rm /usr/share/applications/exo-mail-reader.desktop && \
-    rm /usr/share/applications/xfce4-session-logout.desktop
+    rm /usr/share/applications/exo-mail-reader.desktop
+    # rm /usr/share/applications/xfce4-session-logout.desktop
 
 # Copy resources into workspace
 COPY resources/tools $RESOURCES_PATH/tools
@@ -985,11 +990,11 @@ COPY resources/reports $RESOURCES_PATH/reports
 RUN \
     touch $HOME/.ssh/config && \
     # clear chome init file - not needed since we load settings manually
-    chmod -R a+rwx $WORKSPACE_HOME && \
-    chmod -R a+rwx $RESOURCES_PATH && \
+    chmod -R u+rwx $WORKSPACE_HOME && \
+    chmod -R u+rwx $RESOURCES_PATH && \
     # make all desktop launchers executable
     chmod -R a+rwx /usr/share/applications/ && \
-    ln -s $RESOURCES_PATH/tools/ $HOME/Desktop/Tools && \
+    # ln -s $RESOURCES_PATH/tools/ $HOME/Desktop/Tools && \
     ln -s $WORKSPACE_HOME $HOME/Desktop/workspace && \
     chmod a+rwx /usr/local/bin/start-notebook.sh && \
     chmod a+rwx /usr/local/bin/start.sh && \
@@ -1031,7 +1036,7 @@ ENV CONFIG_BACKUP_ENABLED="true" \
     WORKSPACE_BASE_URL="/" \
     INCLUDE_TUTORIALS="true" \
     # Main port used for sshl proxy -> can be changed
-    WORKSPACE_PORT="8080" \
+    WORKSPACE_PORT="8888" \
     # Set zsh as default shell (e.g. in jupyter)
     SHELL="/usr/bin/zsh" \
     # Fix dark blue color for ls command (unreadable): 
@@ -1092,12 +1097,37 @@ LABEL \
 # TODO: VOLUME [ "/workspace" ]
 # TODO: WORKDIR /workspace?
 
-USER joyvan
+RUN \
+    chmod -R 555 $RESOURCES_PATH/tools && \
+    echo "jovyan ALL=(ALL) NOPASSWD: /resources/tools/, /usr/sbin/cron, /usr/sbin/netdata, /usr/sbin/rsyslogd, /usr/sbin/xrdp, /usr/sbin/sslh, /usr/sbin/sshd" >> /etc/sudoers.d/jovyan && \
+    printf "export ZSH=\"/home/jovyan/.oh-my-zsh\"\nZSH_THEME=\"avit\"\nDISABLE_AUTO_UPDATE=\"true\"\nZSH_AUTOSUGGEST_HIGHLIGHT_STYLE=\"fg=245\"\nplugins=(git k extract colorize pip npm zsh-256color supervisor command-not-found autojump colored-man-pages git-flow git-extras httpie python zsh-autosuggestions history-substring-search zsh-completions zsh-syntax-highlighting)\nsource \$ZSH/oh-my-zsh.sh\nLS_COLORS=\"\"\nexport LS_COLORS\n" > /home/jovyan/.zshrc && \
+    chmod +x /init.sh
+
+# Need
+RUN chown -R jovyan:jovyan $XDG_CACHE_HOME
+
+RUN \
+    chown -R jovyan:jovyan /etc/nginx && \
+    chown -R jovyan:jovyan /etc/supervisor && \
+    chown -R jovyan:jovyan /var/log/supervisor/ && \
+    chown -R jovyan:jovyan /var/log/nginx
+
+# RUN \
+#     chown -R jovyan:jovyan /usr/local && \
+#     chown -R jovyan:jovyan /usr/share
+
+RUN chown -R jovyan:jovyan /usr/local/openresty/nginx
+
+# RUN \
+#     $RESOURCES_PATH/tools/r-runtime.sh && \
+#     $RESOURCES_PATH/tools/r-studio-desktop.sh && \
+#     apt-get clean && \
+#     rm -rf /var/lib/apt/lists
+
+# RUN chmod -R a+rwx $HOME
 
 # use global option with tini to kill full process groups: https://github.com/krallin/tini#process-group-killing
 ENTRYPOINT ["/tini", "-g", "--"]
-
-CMD ["python", "/resources/docker-entrypoint.py"] 
 
 # Port 8080 is the main access port (also includes SSH)
 # Port 5091 is the VNC port
@@ -1105,5 +1135,30 @@ CMD ["python", "/resources/docker-entrypoint.py"]
 # Port 8090 is the Jupyter Notebook Server
 # See supervisor.conf for more ports
 
-EXPOSE 8080
+#IMPORTANT
+RUN mv $HOME/.config $HOME/.config2 && \
+    mv $HOME/.config2 $HOME/.config
+
+#RUN chown -R jovyan:jovyan $HOME
+RUN fix-permissions.sh $HOME
+
+RUN chmod a+x /resources/scripts/start-vnc-server.sh 
+####
+
+RUN cp /usr/share/applications/firefox.desktop $HOME/Desktop/firefox.desktop && \
+    chown jovyan:jovyan $HOME/Desktop/firefox.desktop && \
+    cp /usr/share/applications/code.desktop $HOME/Desktop/code.desktop && \
+    chown jovyan:jovyan $HOME/Desktop/code.desktop
+    #echo  '/usr/lib/firefox/firefox\n20' >> /var/lib/dpkg/alternatives/x-www-browser
+ 
+    #rm $HOME/Desktop/jupyter.desktop && \
+    #xdg-settings set default-web-browser firefox.desktop
+
+RUN update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/firefox 100
+
+USER jovyan
+
+EXPOSE 8888
+
+CMD ["/init.sh"] 
 ###

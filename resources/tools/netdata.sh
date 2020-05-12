@@ -25,16 +25,3 @@ if [ ! -f "/usr/sbin/netdata"  ]; then
 else
     echo "Netdata is already installed"
 fi
-
-# Run
-if [ $INSTALL_ONLY = 0 ] ; then
-    if [ -z "$PORT" ]; then
-        read -p "Please provide a port for starting Netdata: " PORT
-    fi
-
-    echo "Starting Netdata on port "$PORT
-    # Create tool entry for tooling plugin
-    echo '{"id": "netdata-link", "name": "Netdata", "url_path": "/tools/'$PORT'/", "description": "Monitor Hardware Resources"}' > $HOME/.workspace/tools/netdata.json
-    /usr/sbin/netdata -D -p $PORT
-    sleep 15
-fi

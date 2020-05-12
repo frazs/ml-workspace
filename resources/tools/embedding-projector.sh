@@ -21,17 +21,3 @@ if [ ! -f "$RESOURCES_PATH/embedding-projector-standalone/index.html"  ]; then
 else
     echo "Embedding Projector is already installed"
 fi
-
-# Run
-if [ $INSTALL_ONLY = 0 ] ; then
-    if [ -z "$PORT" ]; then
-        read -p "Please provide a port for starting Embedding Projector: " PORT
-    fi
-
-    echo "Starting Embedding Projector on port "$PORT
-    # Create tool entry for tooling plugin
-    echo '{"id": "embedding-projector-link", "name": "Embedding Projector", "url_path": "/tools/'$PORT'/", "description": "Tool for visualizing high dimensional data"}' > $HOME/.workspace/tools/embedding-projector.json
-    cd $RESOURCES_PATH/embedding-projector-standalone/
-    python -m http.server $PORT
-    sleep 10
-fi

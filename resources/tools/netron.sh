@@ -21,16 +21,3 @@ if ! hash netron 2>/dev/null; then
 else
     echo "Netron is already installed"
 fi
-
-# Run
-if [ $INSTALL_ONLY = 0 ] ; then
-    if [ -z "$PORT" ]; then
-        read -p "Please provide a port for starting Netron: " PORT
-    fi
-
-    echo "Starting Netron on port "$PORT
-    # Create tool entry for tooling plugin
-    echo '{"id": "netron-link", "name": "Netron", "url_path": "/tools/'$PORT'/", "description": "Web-viewer for machine learning models"}' > $HOME/.workspace/tools/netron.json
-    netron --port=$PORT --log
-    sleep 15
-fi
