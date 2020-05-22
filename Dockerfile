@@ -467,11 +467,11 @@ RUN \
     clean-layer.sh
 
 # ungit
-COPY resources/tools/ungit.sh $RESOURCES_PATH/tools/ungit.sh
-RUN \
-    /bin/bash $RESOURCES_PATH/tools/ungit.sh --install && \
-    # Cleanup
-    clean-layer.sh
+# COPY resources/tools/ungit.sh $RESOURCES_PATH/tools/ungit.sh
+# RUN \
+#     /bin/bash $RESOURCES_PATH/tools/ungit.sh --install && \
+#     # Cleanup
+#     clean-layer.sh
 
 ## netdata
 COPY resources/tools/netdata.sh $RESOURCES_PATH/tools/netdata.sh
@@ -656,13 +656,13 @@ COPY \
 # install jupyter extensions
 RUN \
     # Activate and configure extensions
-    jupyter contrib nbextension install --user && \
+    # jupyter contrib nbextension install --user && \
     # nbextensions configurator
-    jupyter nbextensions_configurator enable --user && \
+    # jupyter nbextensions_configurator enable --user && \
     # Active nbresuse
-    jupyter serverextension enable --py nbresuse && \
+    # jupyter serverextension enable --py nbresuse && \
     # Activate Jupytext
-    jupyter nbextension enable --py jupytext && \
+    # jupyter nbextension enable --py jupytext && \
     # Disable Jupyter Server Proxy
     jupyter nbextension disable jupyter_server_proxy/tree && \
     # If minimal flavor - exit here
@@ -760,14 +760,6 @@ RUN \
 #     # Remove build folder -> should be remove by lab clean as well?
 #     rm -rf $CONDA_DIR/share/jupyter/lab/staging && \
 #     clean-layer.sh
-
-# Install Jupyter Tooling Extension
-COPY resources/jupyter/extensions $RESOURCES_PATH/jupyter-extensions
-
-RUN \
-    pip install --no-cache-dir $RESOURCES_PATH/jupyter-extensions/tooling-extension/ && \
-    # Cleanup
-    clean-layer.sh
 
 # Install and activate ZSH
 COPY resources/tools/oh-my-zsh.sh $RESOURCES_PATH/tools/oh-my-zsh.sh
@@ -967,8 +959,8 @@ COPY resources/icons $RESOURCES_PATH/icons
 
 RUN \
     # ungit:
-    echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Ungit\nComment=Git Client\nCategories=Development;\nIcon=/resources/icons/ungit-icon.png\nURL=http://localhost:8092/tools/ungit" > /usr/share/applications/ungit.desktop && \
-    chmod +x /usr/share/applications/ungit.desktop && \
+    # echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Ungit\nComment=Git Client\nCategories=Development;\nIcon=/resources/icons/ungit-icon.png\nURL=http://localhost:8092/tools/ungit" > /usr/share/applications/ungit.desktop && \
+    # chmod +x /usr/share/applications/ungit.desktop && \
     # netdata:
     echo "[Desktop Entry]\nVersion=1.0\nType=Link\nName=Netdata\nComment=Hardware Monitoring\nCategories=System;Utility;Development;\nIcon=/resources/icons/netdata-icon.png\nURL=http://localhost:8092/tools/netdata" > $HOME/Desktop/netdata.desktop && \
     chmod +x $HOME/Desktop/netdata.desktop && \
@@ -1103,20 +1095,13 @@ RUN \
     printf "export ZSH=\"/home/jovyan/.oh-my-zsh\"\nZSH_THEME=\"avit\"\nDISABLE_AUTO_UPDATE=\"true\"\nZSH_AUTOSUGGEST_HIGHLIGHT_STYLE=\"fg=245\"\nplugins=(git k extract colorize pip npm zsh-256color supervisor command-not-found autojump colored-man-pages git-flow git-extras httpie python zsh-autosuggestions history-substring-search zsh-completions zsh-syntax-highlighting)\nsource \$ZSH/oh-my-zsh.sh\nLS_COLORS=\"\"\nexport LS_COLORS\n" > /home/jovyan/.zshrc && \
     chmod +x /init.sh
 
-# Need
-RUN chown -R jovyan:jovyan $XDG_CACHE_HOME
-
-RUN \
+# Misc. connection permissions
+RUN chown -R jovyan:jovyan $XDG_CACHE_HOME && \
     chown -R jovyan:jovyan /etc/nginx && \
     chown -R jovyan:jovyan /etc/supervisor && \
     chown -R jovyan:jovyan /var/log/supervisor/ && \
-    chown -R jovyan:jovyan /var/log/nginx
-
-# RUN \
-#     chown -R jovyan:jovyan /usr/local && \
-#     chown -R jovyan:jovyan /usr/share
-
-RUN chown -R jovyan:jovyan /usr/local/openresty/nginx
+    chown -R jovyan:jovyan /var/log/nginx && \
+    chown -R jovyan:jovyan /usr/local/openresty/nginx
 
 # RUN \
 #     $RESOURCES_PATH/tools/r-runtime.sh && \
@@ -1124,41 +1109,43 @@ RUN chown -R jovyan:jovyan /usr/local/openresty/nginx
 #     apt-get clean && \
 #     rm -rf /var/lib/apt/lists
 
-# RUN chmod -R a+rwx $HOME
+# Small baked-in tool requests
+RUN /bin/bash $RESOURCES_PATH/tools/emacs.sh
 
-# use global option with tini to kill full process groups: https://github.com/krallin/tini#process-group-killing
-ENTRYPOINT ["/tini", "-g", "--"]
+### Moved here to debug landing page refactor:
 
+# Install Jupyter Tooling Extension
+COPY resources/jupyter/extensions $RESOURCES_PATH/jupyter-extensions
+
+RUN \
+    pip install --no-cache-dir $RESOURCES_PATH/jupyter-extensions/tooling-extension/ && \
+    # Cleanup
+    clean-layer.sh
+    
 # Port 8080 is the main access port (also includes SSH)
 # Port 5091 is the VNC port
 # Port 3389 is the RDP port
 # Port 8090 is the Jupyter Notebook Server
 # See supervisor.conf for more ports
 
-#IMPORTANT
+# Hotfix to connect to GUI 
 RUN mv $HOME/.config $HOME/.config2 && \
-    mv $HOME/.config2 $HOME/.config
+    mv $HOME/.config2 $HOME/.config && \
+    fix-permissions.sh $HOME && \
+    chmod a+x /resources/scripts/start-vnc-server.sh 
 
-#RUN chown -R jovyan:jovyan $HOME
-RUN fix-permissions.sh $HOME
-
-RUN chmod a+x /resources/scripts/start-vnc-server.sh 
-####
-
+# Desktop icons, firefox default
 RUN cp /usr/share/applications/firefox.desktop $HOME/Desktop/firefox.desktop && \
     chown jovyan:jovyan $HOME/Desktop/firefox.desktop && \
+    update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/firefox 100 && \
     cp /usr/share/applications/code.desktop $HOME/Desktop/code.desktop && \
     chown jovyan:jovyan $HOME/Desktop/code.desktop
-    #echo  '/usr/lib/firefox/firefox\n20' >> /var/lib/dpkg/alternatives/x-www-browser
- 
-    #rm $HOME/Desktop/jupyter.desktop && \
-    #xdg-settings set default-web-browser firefox.desktop
 
-RUN update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/firefox 100
+# use global option with tini to kill full process groups: https://github.com/krallin/tini#process-group-killing
+ENTRYPOINT ["/tini", "-g", "--"]
 
 USER jovyan
 
 EXPOSE 8888
 
 CMD ["/init.sh"] 
-###
